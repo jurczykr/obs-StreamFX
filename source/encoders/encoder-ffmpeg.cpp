@@ -84,7 +84,7 @@ ffmpeg_instance::ffmpeg_instance(obs_data_t* settings, obs_encoder_t* self, bool
 
 	  _factory(reinterpret_cast<ffmpeg_factory*>(obs_encoder_get_type_data(self))),
 
-	  _codec(_factory->get_avcodec()), _context(nullptr), _handler(ffmpeg_manager::get()->get_handler(_codec->name)),
+	  _codec(_factory->get_avcodec()), _context(nullptr), _handler(ffmpeg_manager::instance()->get_handler(_codec->name)),
 
 	  _scaler(), _packet(),
 
@@ -97,10 +97,8 @@ ffmpeg_instance::ffmpeg_instance(obs_data_t* settings, obs_encoder_t* self, bool
 	// Initialize GPU Stuff
 	if (is_hw) {
 		// Abort if user specified manual override.
-		if ((obs_data_get_int(settings, ST_KEY_FFMPEG_GPU) != -1) || (obs_encoder_scaling_enabled(_self))
-			|| (video_output_get_info(obs_encoder_video(_self))->format != VIDEO_FORMAT_NV12)) {
-			throw std::runtime_error(
-				"Selected settings prevent the use of hardware encoding, falling back to software.");
+		if ((obs_data_get_int(settings, ST_KEY_FFMPEG_GPU) != -1) || (obs_encoder_scaling_enabled(_self)) || (video_output_get_info(obs_encoder_video(_self))->format != VIDEO_FORMAT_NV12)) {
+			throw std::runtime_error("Selected settings prevent the use of hardware encoding, falling back to software.");
 		}
 
 #ifdef WIN32
@@ -201,8 +199,7 @@ bool ffmpeg_instance::update(obs_data_t* settings)
 	bool support_reconfig_gpu       = false;
 	bool support_reconfig_keyframes = false;
 	if (_handler) {
-		support_reconfig = _handler->supports_reconfigure(_factory, support_reconfig_threads, support_reconfig_gpu,
-														  support_reconfig_keyframes);
+		support_reconfig = _handler->supports_reconfigure(_factory, support_reconfig_threads, support_reconfig_gpu, support_reconfig_keyframes);
 	}
 
 	if (!_context->internal) {
@@ -259,10 +256,8 @@ bool ffmpeg_instance::update(obs_data_t* settings)
 			bool    is_seconds = (kf_type == 0);
 
 			if (is_seconds) {
-				double framerate =
-					static_cast<double>(ovi.fps_num) / (static_cast<double>(ovi.fps_den) * _framerate_divisor);
-				_context->gop_size =
-					static_cast<int>(obs_data_get_double(settings, ST_KEY_KEYFRAMES_INTERVAL_SECONDS) * framerate);
+				double framerate   = static_cast<double>(ovi.fps_num) / (static_cast<double>(ovi.fps_den) * _framerate_divisor);
+				_context->gop_size = static_cast<int>(obs_data_get_double(settings, ST_KEY_KEYFRAMES_INTERVAL_SECONDS) * framerate);
 			} else {
 				_context->gop_size = static_cast<int>(obs_data_get_int(settings, ST_KEY_KEYFRAMES_INTERVAL_FRAMES));
 			}
@@ -291,36 +286,20 @@ bool ffmpeg_instance::update(obs_data_t* settings)
 	if (!_context->internal || support_reconfig) {
 		DLOG_INFO("[%s] Configuration:", _codec->name);
 		DLOG_INFO("[%s]   FFmpeg:", _codec->name);
-		DLOG_INFO("[%s]     Custom Settings: %s", _codec->name,
-				  obs_data_get_string(settings, ST_KEY_FFMPEG_CUSTOMSETTINGS));
-		DLOG_INFO("[%s]     Standard Compliance: %s", _codec->name,
-				  ::streamfx::ffmpeg::tools::get_std_compliance_name(_context->strict_std_compliance));
-		DLOG_INFO("[%s]     Threading: %s (with %i threads)", _codec->name,
-				  ::streamfx::ffmpeg::tools::get_thread_type_name(_context->thread_type), _context->thread_count);
+		DLOG_INFO("[%s]     Custom Settings: %s", _codec->name, obs_data_get_string(settings, ST_KEY_FFMPEG_CUSTOMSETTINGS));
+		DLOG_INFO("[%s]     Standard Compliance: %s", _codec->name, ::streamfx::ffmpeg::tools::get_std_compliance_name(_context->strict_std_compliance));
+		DLOG_INFO("[%s]     Threading: %s (with %i threads)", _codec->name, ::streamfx::ffmpeg::tools::get_thread_type_name(_context->thread_type), _context->thread_count);
 
 		DLOG_INFO("[%s]   Video:", _codec->name);
 		if (_hwinst) {
-			DLOG_INFO("[%s]     Texture: %" PRId32 "x%" PRId32 " %s %s %s", _codec->name, _context->width,
-					  _context->height, ::streamfx::ffmpeg::tools::get_pixel_format_name(_context->sw_pix_fmt),
-					  ::streamfx::ffmpeg::tools::get_color_space_name(_context->colorspace),
-					  av_color_range_name(_context->color_range));
+			DLOG_INFO("[%s]     Texture: %" PRId32 "x%" PRId32 " %s %s %s", _codec->name, _context->width, _context->height, ::streamfx::ffmpeg::tools::get_pixel_format_name(_context->sw_pix_fmt), ::streamfx::ffmpeg::tools::get_color_space_name(_context->colorspace), av_color_range_name(_context->color_range));
 		} else {
-			DLOG_INFO("[%s]     Input: %" PRId32 "x%" PRId32 " %s %s %s", _codec->name, _scaler.get_source_width(),
-					  _scaler.get_source_height(),
-					  ::streamfx::ffmpeg::tools::get_pixel_format_name(_scaler.get_source_format()),
-					  ::streamfx::ffmpeg::tools::get_color_space_name(_scaler.get_source_colorspace()),
-					  _scaler.is_source_full_range() ? "Full" : "Partial");
-			DLOG_INFO("[%s]     Output: %" PRId32 "x%" PRId32 " %s %s %s", _codec->name, _scaler.get_target_width(),
-					  _scaler.get_target_height(),
-					  ::streamfx::ffmpeg::tools::get_pixel_format_name(_scaler.get_target_format()),
-					  ::streamfx::ffmpeg::tools::get_color_space_name(_scaler.get_target_colorspace()),
-					  _scaler.is_target_full_range() ? "Full" : "Partial");
+			DLOG_INFO("[%s]     Input: %" PRId32 "x%" PRId32 " %s %s %s", _codec->name, _scaler.get_source_width(), _scaler.get_source_height(), ::streamfx::ffmpeg::tools::get_pixel_format_name(_scaler.get_source_format()), ::streamfx::ffmpeg::tools::get_color_space_name(_scaler.get_source_colorspace()), _scaler.is_source_full_range() ? "Full" : "Partial");
+			DLOG_INFO("[%s]     Output: %" PRId32 "x%" PRId32 " %s %s %s", _codec->name, _scaler.get_target_width(), _scaler.get_target_height(), ::streamfx::ffmpeg::tools::get_pixel_format_name(_scaler.get_target_format()), ::streamfx::ffmpeg::tools::get_color_space_name(_scaler.get_target_colorspace()), _scaler.is_target_full_range() ? "Full" : "Partial");
 			if (!_hwinst)
 				DLOG_INFO("[%s]     On GPU Index: %lli", _codec->name, obs_data_get_int(settings, ST_KEY_FFMPEG_GPU));
 		}
-		DLOG_INFO("[%s]     Framerate: %" PRId32 "/%" PRId32 " (%f FPS)", _codec->name, _context->time_base.den,
-				  _context->time_base.num,
-				  static_cast<double_t>(_context->time_base.den) / static_cast<double_t>(_context->time_base.num));
+		DLOG_INFO("[%s]     Framerate: %" PRId32 "/%" PRId32 " (%f FPS)", _codec->name, _context->time_base.den, _context->time_base.num, static_cast<double_t>(_context->time_base.den) / static_cast<double_t>(_context->time_base.num));
 
 		DLOG_INFO("[%s]   Keyframes: ", _codec->name);
 		if (_context->keyint_min != _context->gop_size) {
@@ -391,16 +370,12 @@ bool ffmpeg_instance::encode_video(struct encoder_frame* frame, struct encoder_p
 		vframe->color_trc       = _context->color_trc;
 		vframe->pts             = frame->pts;
 
-		if ((_scaler.is_source_full_range() == _scaler.is_target_full_range())
-			&& (_scaler.get_source_colorspace() == _scaler.get_target_colorspace())
-			&& (_scaler.get_source_format() == _scaler.get_target_format())) {
+		if ((_scaler.is_source_full_range() == _scaler.is_target_full_range()) && (_scaler.get_source_colorspace() == _scaler.get_target_colorspace()) && (_scaler.get_source_format() == _scaler.get_target_format())) {
 			copy_data(frame, vframe.get());
 		} else {
-			int res = _scaler.convert(reinterpret_cast<uint8_t**>(frame->data), reinterpret_cast<int*>(frame->linesize),
-									  0, _context->height, vframe->data, vframe->linesize);
+			int res = _scaler.convert(reinterpret_cast<uint8_t**>(frame->data), reinterpret_cast<int*>(frame->linesize), 0, _context->height, vframe->data, vframe->linesize);
 			if (res <= 0) {
-				DLOG_ERROR("Failed to convert frame: %s (%" PRId32 ").",
-						   ::streamfx::ffmpeg::tools::get_error_description(res), res);
+				DLOG_ERROR("Failed to convert frame: %s (%" PRId32 ").", ::streamfx::ffmpeg::tools::get_error_description(res), res);
 				return false;
 			}
 		}
@@ -412,8 +387,7 @@ bool ffmpeg_instance::encode_video(struct encoder_frame* frame, struct encoder_p
 	return true;
 }
 
-bool ffmpeg_instance::encode_video(uint32_t handle, int64_t pts, uint64_t lock_key, uint64_t* next_key,
-								   struct encoder_packet* packet, bool* received_packet)
+bool ffmpeg_instance::encode_video(uint32_t handle, int64_t pts, uint64_t lock_key, uint64_t* next_key, struct encoder_packet* packet, bool* received_packet)
 {
 	if ((_framerate_divisor > 1) && (pts % _framerate_divisor != 0)) {
 		*next_key = lock_key;
@@ -486,12 +460,7 @@ void ffmpeg_instance::initialize_sw(obs_data_t* settings)
 		// Create Scaler
 		if (!_scaler.initialize(SWS_SINC | SWS_FULL_CHR_H_INT | SWS_FULL_CHR_H_INP | SWS_ACCURATE_RND | SWS_BITEXACT)) {
 			std::stringstream sstr;
-			sstr << "Initializing scaler failed for conversion from '"
-				 << ::streamfx::ffmpeg::tools::get_pixel_format_name(_scaler.get_source_format()) << "' to '"
-				 << ::streamfx::ffmpeg::tools::get_pixel_format_name(_scaler.get_target_format())
-				 << "' with color space '"
-				 << ::streamfx::ffmpeg::tools::get_color_space_name(_scaler.get_source_colorspace()) << "' and "
-				 << (_scaler.is_source_full_range() ? "full" : "partial") << " range.";
+			sstr << "Initializing scaler failed for conversion from '" << ::streamfx::ffmpeg::tools::get_pixel_format_name(_scaler.get_source_format()) << "' to '" << ::streamfx::ffmpeg::tools::get_pixel_format_name(_scaler.get_target_format()) << "' with color space '" << ::streamfx::ffmpeg::tools::get_color_space_name(_scaler.get_source_colorspace()) << "' and " << (_scaler.is_source_full_range() ? "full" : "partial") << " range.";
 			throw std::runtime_error(sstr.str());
 		}
 	}
@@ -526,8 +495,7 @@ void ffmpeg_instance::initialize_hw(obs_data_t*)
 	if (int32_t res = av_hwframe_ctx_init(_context->hw_frames_ctx); res < 0) {
 		std::array<char, 4096> buffer;
 
-		int len = snprintf(buffer.data(), buffer.size(), "Failed initialize hardware context: %s (%" PRIu32 ")",
-						   ::streamfx::ffmpeg::tools::get_error_description(res), res);
+		int len = snprintf(buffer.data(), buffer.size(), "Failed initialize hardware context: %s (%" PRIu32 ")", ::streamfx::ffmpeg::tools::get_error_description(res), res);
 		throw std::runtime_error(std::string(buffer.data(), buffer.data() + len));
 	}
 #endif
@@ -637,8 +605,7 @@ int ffmpeg_instance::receive_packet(bool* received_packet, struct encoder_packet
 			uint8_t*    tmp_sei;
 			std::size_t sz_packet, sz_header, sz_sei;
 
-			obs_extract_avc_headers(_packet->data, static_cast<size_t>(_packet->size), &tmp_packet, &sz_packet,
-									&tmp_header, &sz_header, &tmp_sei, &sz_sei);
+			obs_extract_avc_headers(_packet->data, static_cast<size_t>(_packet->size), &tmp_packet, &sz_packet, &tmp_header, &sz_header, &tmp_sei, &sz_sei);
 
 			if (sz_header) {
 				_extra_data.resize(sz_header);
@@ -691,7 +658,7 @@ int ffmpeg_instance::receive_packet(bool* received_packet, struct encoder_packet
 		} else if (side_data.type == AV_PKT_DATA_QUALITY_STATS) {
 			// Decisions based on picture type, if present.
 			switch (side_data.data[sizeof(uint32_t)]) {
-			case AV_PICTURE_TYPE_I:  // I-Frame
+			case AV_PICTURE_TYPE_I: // I-Frame
 			case AV_PICTURE_TYPE_SI: // Switching I-Frame
 				if (_packet->flags & AV_PKT_FLAG_KEY) {
 					// Recovery only via IDR-Frame.
@@ -703,7 +670,7 @@ int ffmpeg_instance::receive_packet(bool* received_packet, struct encoder_packet
 					packet->drop_priority = 2; // OBS_NAL_PRIORITY_HIGH
 				}
 				break;
-			case AV_PICTURE_TYPE_P:  // P-Frame
+			case AV_PICTURE_TYPE_P: // P-Frame
 			case AV_PICTURE_TYPE_SP: // Switching P-Frame
 				// Recovery via I- or IDR-Frame.
 				packet->priority      = 1; // OBS_NAL_PRIORITY_LOW
@@ -781,8 +748,7 @@ bool ffmpeg_instance::encode_avframe(std::shared_ptr<AVFrame> frame, encoder_pac
 				sent_frame = true;
 				break;
 			default:
-				DLOG_ERROR("Failed to encode frame: %s (%" PRId32 ").",
-						   ::streamfx::ffmpeg::tools::get_error_description(res), res);
+				DLOG_ERROR("Failed to encode frame: %s (%" PRId32 ").", ::streamfx::ffmpeg::tools::get_error_description(res), res);
 				return false;
 			}
 		}
@@ -807,8 +773,7 @@ bool ffmpeg_instance::encode_avframe(std::shared_ptr<AVFrame> frame, encoder_pac
 				}
 				break;
 			default:
-				DLOG_ERROR("Failed to receive packet: %s (%" PRId32 ").",
-						   ::streamfx::ffmpeg::tools::get_error_description(res), res);
+				DLOG_ERROR("Failed to receive packet: %s (%" PRId32 ").", ::streamfx::ffmpeg::tools::get_error_description(res), res);
 				return false;
 			}
 		}
@@ -867,7 +832,7 @@ void ffmpeg_instance::parse_ffmpeg_commandline(std::string_view text)
 					// Not supported yet.
 					p += 3;
 				} else if (here2 == 'u') { // 4 or 8 wide Unicode.
-										   // Not supported yet.
+					// Not supported yet.
 				} else if (here2 == 'a') {
 					opt_stream << '\a';
 					p++;
@@ -955,8 +920,7 @@ void ffmpeg_instance::parse_ffmpeg_commandline(std::string_view text)
 
 			int res = av_opt_set(_context, key.c_str(), value.c_str(), AV_OPT_SEARCH_CHILDREN);
 			if (res < 0) {
-				DLOG_WARNING("Option '%s' (key: '%s', value: '%s') encountered error: %s", opt.c_str(), key.c_str(),
-							 value.c_str(), ::streamfx::ffmpeg::tools::get_error_description(res));
+				DLOG_WARNING("Option '%s' (key: '%s', value: '%s') encountered error: %s", opt.c_str(), key.c_str(), value.c_str(), ::streamfx::ffmpeg::tools::get_error_description(res));
 			}
 		} catch (const std::exception& ex) {
 			DLOG_ERROR("Option '%s' encountered exception: %s", opt.c_str(), ex.what());
@@ -964,7 +928,7 @@ void ffmpeg_instance::parse_ffmpeg_commandline(std::string_view text)
 	}
 }
 
-ffmpeg_factory::ffmpeg_factory(const AVCodec* codec) : _avcodec(codec)
+ffmpeg_factory::ffmpeg_factory(ffmpeg_manager* manager, const AVCodec* codec) : _avcodec(codec)
 {
 	// Generate default identifier.
 	{
@@ -994,7 +958,7 @@ ffmpeg_factory::ffmpeg_factory(const AVCodec* codec) : _avcodec(codec)
 	}
 
 	// Find any available handlers for this codec.
-	if (_handler = ffmpeg_manager::get()->get_handler(_avcodec->name); _handler) {
+	if (_handler = manager->get_handler(_avcodec->name); _handler) {
 		// Override any found info with the one specified by the handler.
 		_handler->adjust_info(this, _avcodec, _id, _name, _codec);
 
@@ -1042,13 +1006,14 @@ const char* ffmpeg_factory::get_name()
 
 void ffmpeg_factory::get_defaults2(obs_data_t* settings)
 {
-	if (_handler)
+	if (_handler) {
 		_handler->get_defaults(settings, _avcodec, nullptr, _handler->is_hardware_encoder(this));
 
-	if ((_avcodec->capabilities & AV_CODEC_CAP_INTRA_ONLY) == 0) {
-		obs_data_set_default_int(settings, ST_KEY_KEYFRAMES_INTERVALTYPE, 0);
-		obs_data_set_default_double(settings, ST_KEY_KEYFRAMES_INTERVAL_SECONDS, 2.0);
-		obs_data_set_default_int(settings, ST_KEY_KEYFRAMES_INTERVAL_FRAMES, 300);
+		if (_handler->has_keyframe_support(this)) {
+			obs_data_set_default_int(settings, ST_KEY_KEYFRAMES_INTERVALTYPE, 0);
+			obs_data_set_default_double(settings, ST_KEY_KEYFRAMES_INTERVAL_SECONDS, 2.0);
+			obs_data_set_default_int(settings, ST_KEY_KEYFRAMES_INTERVAL_FRAMES, 300);
+		}
 	}
 
 	{ // Integrated Options
@@ -1087,8 +1052,7 @@ obs_properties_t* ffmpeg_factory::get_properties2(instance_t* data)
 
 #ifdef ENABLE_FRONTEND
 	{
-		obs_properties_add_button2(props, S_MANUAL_OPEN, D_TRANSLATE(S_MANUAL_OPEN),
-								   streamfx::encoder::ffmpeg::ffmpeg_factory::on_manual_open, this);
+		obs_properties_add_button2(props, S_MANUAL_OPEN, D_TRANSLATE(S_MANUAL_OPEN), streamfx::encoder::ffmpeg::ffmpeg_factory::on_manual_open, this);
 	}
 #endif
 
@@ -1108,23 +1072,17 @@ obs_properties_t* ffmpeg_factory::get_properties2(instance_t* data)
 		}
 
 		{ // Key-Frame Interval Type
-			auto p =
-				obs_properties_add_list(grp, ST_KEY_KEYFRAMES_INTERVALTYPE, D_TRANSLATE(ST_I18N_KEYFRAMES_INTERVALTYPE),
-										OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+			auto p = obs_properties_add_list(grp, ST_KEY_KEYFRAMES_INTERVALTYPE, D_TRANSLATE(ST_I18N_KEYFRAMES_INTERVALTYPE), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
 			obs_property_set_modified_callback(p, modified_keyframes);
 			obs_property_list_add_int(p, D_TRANSLATE(ST_I18N_KEYFRAMES_INTERVALTYPE_("Seconds")), 0);
 			obs_property_list_add_int(p, D_TRANSLATE(ST_I18N_KEYFRAMES_INTERVALTYPE_("Frames")), 1);
 		}
 		{ // Key-Frame Interval Seconds
-			auto p = obs_properties_add_float(grp, ST_KEY_KEYFRAMES_INTERVAL_SECONDS,
-											  D_TRANSLATE(ST_I18N_KEYFRAMES_INTERVAL), 0.00,
-											  std::numeric_limits<int16_t>::max(), 0.01);
+			auto p = obs_properties_add_float(grp, ST_KEY_KEYFRAMES_INTERVAL_SECONDS, D_TRANSLATE(ST_I18N_KEYFRAMES_INTERVAL), 0.00, std::numeric_limits<int16_t>::max(), 0.01);
 			obs_property_float_set_suffix(p, " seconds");
 		}
 		{ // Key-Frame Interval Frames
-			auto p =
-				obs_properties_add_int(grp, ST_KEY_KEYFRAMES_INTERVAL_FRAMES, D_TRANSLATE(ST_I18N_KEYFRAMES_INTERVAL),
-									   0, std::numeric_limits<int32_t>::max(), 1);
+			auto p = obs_properties_add_int(grp, ST_KEY_KEYFRAMES_INTERVAL_FRAMES, D_TRANSLATE(ST_I18N_KEYFRAMES_INTERVAL), 0, std::numeric_limits<int32_t>::max(), 1);
 			obs_property_int_set_suffix(p, " frames");
 		}
 	}
@@ -1138,19 +1096,15 @@ obs_properties_t* ffmpeg_factory::get_properties2(instance_t* data)
 		}
 
 		{ // Custom Settings
-			auto p =
-				obs_properties_add_text(grp, ST_KEY_FFMPEG_CUSTOMSETTINGS, D_TRANSLATE(ST_I18N_FFMPEG_CUSTOMSETTINGS),
-										obs_text_type::OBS_TEXT_DEFAULT);
+			auto p = obs_properties_add_text(grp, ST_KEY_FFMPEG_CUSTOMSETTINGS, D_TRANSLATE(ST_I18N_FFMPEG_CUSTOMSETTINGS), obs_text_type::OBS_TEXT_DEFAULT);
 		}
 
 		if (_handler && _handler->is_hardware_encoder(this)) {
-			auto p = obs_properties_add_int(grp, ST_KEY_FFMPEG_GPU, D_TRANSLATE(ST_I18N_FFMPEG_GPU), -1,
-											std::numeric_limits<uint8_t>::max(), 1);
+			auto p = obs_properties_add_int(grp, ST_KEY_FFMPEG_GPU, D_TRANSLATE(ST_I18N_FFMPEG_GPU), -1, std::numeric_limits<uint8_t>::max(), 1);
 		}
 
 		if (_handler && _handler->has_threading_support(this)) {
-			auto p = obs_properties_add_int_slider(grp, ST_KEY_FFMPEG_THREADS, D_TRANSLATE(ST_I18N_FFMPEG_THREADS), 0,
-												   static_cast<int64_t>(std::thread::hardware_concurrency()) * 2, 1);
+			auto p = obs_properties_add_int_slider(grp, ST_KEY_FFMPEG_THREADS, D_TRANSLATE(ST_I18N_FFMPEG_THREADS), 0, static_cast<int64_t>(std::thread::hardware_concurrency()) * 2, 1);
 		}
 
 		{ // Frame Skipping
@@ -1159,15 +1113,13 @@ obs_properties_t* ffmpeg_factory::get_properties2(instance_t* data)
 				throw std::runtime_error("obs_get_video_info failed unexpectedly.");
 			}
 
-			auto p = obs_properties_add_list(grp, ST_KEY_FFMPEG_FRAMERATE, D_TRANSLATE(ST_I18N_FFMPEG_FRAMERATE),
-											 OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+			auto p = obs_properties_add_list(grp, ST_KEY_FFMPEG_FRAMERATE, D_TRANSLATE(ST_I18N_FFMPEG_FRAMERATE), OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
 			// For now, an arbitrary limit of 1/10th the Framerate should be fine.
 			std::vector<char> buf{size_t{256}, 0, std::allocator<char>()};
 			for (uint32_t divisor = 1; divisor <= 10; divisor++) {
 				double fps_num = static_cast<double>(ovi.fps_num) / static_cast<double>(divisor);
 				double fps     = fps_num / static_cast<double>(ovi.fps_den);
-				snprintf(buf.data(), buf.size(), "%8.2f (%" PRIu32 "/%" PRIu32 ")", fps, ovi.fps_num,
-						 ovi.fps_den * divisor);
+				snprintf(buf.data(), buf.size(), "%8.2f (%" PRIu32 "/%" PRIu32 ")", fps, ovi.fps_num, ovi.fps_den * divisor);
 				obs_property_list_add_int(p, buf.data(), divisor);
 			}
 		}
@@ -1213,15 +1165,7 @@ ffmpeg_manager::ffmpeg_manager() : _factories(), _handlers(), _debug_handler()
 #ifdef ENABLE_ENCODER_FFMPEG_DNXHR
 	register_handler("dnxhd", ::std::make_shared<handler::dnxhd_handler>());
 #endif
-}
 
-ffmpeg_manager::~ffmpeg_manager()
-{
-	_factories.clear();
-}
-
-void ffmpeg_manager::register_encoders()
-{
 	// Encoders
 	void* iterator = nullptr;
 	for (const AVCodec* codec = av_codec_iterate(&iterator); codec != nullptr; codec = av_codec_iterate(&iterator)) {
@@ -1231,12 +1175,17 @@ void ffmpeg_manager::register_encoders()
 
 		if ((codec->type == AVMediaType::AVMEDIA_TYPE_AUDIO) || (codec->type == AVMediaType::AVMEDIA_TYPE_VIDEO)) {
 			try {
-				_factories.emplace(codec, std::make_shared<ffmpeg_factory>(codec));
+				_factories.emplace(codec, std::make_shared<ffmpeg_factory>(this, codec));
 			} catch (const std::exception& ex) {
 				DLOG_ERROR("Failed to register encoder '%s': %s", codec->name, ex.what());
 			}
 		}
 	}
+}
+
+ffmpeg_manager::~ffmpeg_manager()
+{
+	_factories.clear();
 }
 
 void ffmpeg_manager::register_handler(std::string codec, std::shared_ptr<handler::handler> handler)
@@ -1261,22 +1210,27 @@ bool ffmpeg_manager::has_handler(std::string_view codec)
 	return (_handlers.find(codec.data()) != _handlers.end());
 }
 
-std::shared_ptr<ffmpeg_manager> _ffmepg_encoder_factory_instance = nullptr;
-
-void ffmpeg_manager::initialize()
+std::shared_ptr<ffmpeg_manager> ffmpeg_manager::instance()
 {
-	if (!_ffmepg_encoder_factory_instance) {
-		_ffmepg_encoder_factory_instance = std::make_shared<ffmpeg_manager>();
-		_ffmepg_encoder_factory_instance->register_encoders();
+	static std::weak_ptr<ffmpeg_manager> winst;
+	static std::mutex                    mtx;
+
+	std::unique_lock<decltype(mtx)> lock(mtx);
+	auto                            instance = winst.lock();
+	if (!instance) {
+		instance = std::shared_ptr<ffmpeg_manager>(new ffmpeg_manager());
+		winst    = instance;
 	}
+	return instance;
 }
 
-void ffmpeg_manager::finalize()
-{
-	_ffmepg_encoder_factory_instance.reset();
-}
+static std::shared_ptr<ffmpeg_manager> loader_instance;
 
-std::shared_ptr<ffmpeg_manager> ffmpeg_manager::get()
-{
-	return _ffmepg_encoder_factory_instance;
-}
+static auto loader = streamfx::loader(
+	[]() { // Initalizer
+		loader_instance = ffmpeg_manager::instance();
+	},
+	[]() { // Finalizer
+		loader_instance.reset();
+	},
+	streamfx::loader_priority::NORMAL);
