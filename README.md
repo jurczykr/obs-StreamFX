@@ -12,3 +12,4 @@ Bring your setup to the modern day with StreamFX! With several super fast filter
 * [Installation Guide](https://github.com/xaymar/obs-streamfx/wiki/Installation)
 
 
+
